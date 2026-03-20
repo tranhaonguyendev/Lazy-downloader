@@ -1,15 +1,15 @@
-# Dự án Lazy Downloader 1.0.0
+# Dự án lazy Downloader 1.0.0
 
-[![npm](https://img.shields.io/npm/v/Lazy-downloader.svg)](https://www.npmjs.com/package/Lazy-downloader)
-[![Node](https://img.shields.io/node/v/Lazy-downloader.svg)](https://www.npmjs.com/package/Lazy-downloader)
-[![License](https://img.shields.io/npm/l/Lazy-downloader.svg)](https://www.npmjs.com/package/Lazy-downloader)
+[![npm](https://img.shields.io/npm/v/lazy-downloader.svg)](https://www.npmjs.com/package/lazy-downloader)
+[![Node](https://img.shields.io/node/v/lazy-downloader.svg)](https://www.npmjs.com/package/lazy-downloader)
+[![License](https://img.shields.io/npm/l/lazy-downloader.svg)](https://www.npmjs.com/package/lazy-downloader)
 
-`Lazy-downloader` là CLI Node.js để parse URL và tải media trực tiếp từ nhiều nền tảng.
+`lazy-downloader` là CLI Node.js để parse URL và tải media trực tiếp từ nhiều nền tảng.
 
 ## Install
 
 ```bash
-npm install -g Lazy-downloader
+npm install -g lazy-downloader
 npx playwright install chromium
 ```
 
@@ -33,7 +33,7 @@ aio-down "URL" -P downloads --all -o "%(title)s_%(idx)s.%(ext)s"
 ## Library (Node.js)
 
 ```js
-import { DownloadWorker } from "Lazy-downloader";
+import { DownloadWorker } from "lazy-downloader";
 
 const w = new DownloadWorker({ allMedias: true, outtmpl: "%(title)s_%(idx)s.%(ext)s" });
 const res = await w.download("URL", "downloads");
@@ -45,7 +45,7 @@ console.log(res.paths);
 Hook nhận object trạng thái.
 
 ```js
-import { DownloadWorker } from "Lazy-downloader";
+import { DownloadWorker } from "lazy-downloader";
 
 const hook = (d) => {
   if (d.status === "downloading") {
