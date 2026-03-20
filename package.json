@@ -1,0 +1,33 @@
+{
+  "name": "Lazy-downloader",
+  "version": "1.0.0",
+  "description": "All-in-one media downloader CLI (Node.js)",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "bin": {
+    "aio-down": "dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "exports": "./dist/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/cli.js",
+    "test:help": "node dist/cli.js --help",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "playwright": "^1.54.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.11",
+    "typescript": "^5.9.2"
+  }
+}
