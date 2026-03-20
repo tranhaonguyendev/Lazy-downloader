@@ -10,7 +10,7 @@ npx playwright install chromium
 ## Usage
 
 ```bash
-aio-down "URL" -P downloads --all -o "%(title)s_%(idx)s.%(ext)s"
+lazy-down "URL" -P downloads --all -o "%(title)s_%(idx)s.%(ext)s"
 ```
 
 ## Flags
@@ -30,5 +30,5 @@ aio-down "URL" -P downloads --all -o "%(title)s_%(idx)s.%(ext)s"
 ## Batch from stdin
 
 ```bash
-type urls.txt | aio-down --stdin -P downloads --all
+type urls.txt | lazy-down --stdin -P downloads --all
 ```

@@ -23,7 +23,7 @@ export class AuthCacheStore {
 
   constructor(filePath?: string | null) {
     const env = (process.env.AIO_DOWN_AUTH_CACHE || "").trim();
-    this.filePath = filePath || env || path.join(os.homedir(), ".cache", "aio-downloader", "auth-cache.json");
+    this.filePath = filePath || env || path.join(os.homedir(), ".cache", "lazy-downloader", "auth-cache.json");
   }
 
   private load(): void {

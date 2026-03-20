@@ -2,7 +2,7 @@
 import { DownloadWorker } from "./worker.js";
 import { defaultProgressPrinter } from "./progress.js";
 function usage() {
-    console.log(`Usage: aio-down [url] [options]\n
+    console.log(`Usage: lazy-down [url] [options]\n
 Options:
   -P, --paths <dir>          Output directory (default: assets/cache)
   -o, --outtmpl <template>   Output template (default: %(title)s.%(ext)s)
@@ -11,7 +11,7 @@ Options:
   --no-unlock                Disable unlock
   --timeout <sec>            Timeout in seconds (default: 60)
   --retries <n>              Max retries (default: 3)
-  --output-file <prefix>     JSON output file prefix (default: AIO-Downloaded)
+  --output-file <prefix>     JSON output file prefix (default: lazy-downloaded)
   --write-json               Write JSON payload to file
   --no-pretty                Disable pretty JSON output in file
   --no-print-json            Disable printing JSON payload
@@ -30,7 +30,7 @@ function parseArgs(argv) {
         unlock: true,
         timeout: 60,
         retries: 3,
-        outputFile: "AIO-Downloaded",
+        outputFile: "lazy-downloaded",
         writeJson: false,
         noPretty: false,
         noPrintJson: false,

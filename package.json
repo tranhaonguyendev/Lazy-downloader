@@ -10,7 +10,7 @@
     "LICENSE"
   ],
   "bin": {
-    "aio-down": "dist/cli.js"
+    "lazy-down": "dist/cli.js"
   },
   "main": "./dist/index.js",
   "exports": "./dist/index.js",

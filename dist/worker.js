@@ -23,7 +23,7 @@ export class DownloadWorker {
             unlock: true,
             timeoutSec: 60,
             maxRetries: 3,
-            outputFile: "AIO-Downloaded",
+            outputFile: "lazy-downloaded",
             writeJson: false,
             jsonPretty: true,
             printJson: true,

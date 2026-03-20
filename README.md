@@ -16,7 +16,7 @@ npx playwright install chromium
 ## CLI
 
 ```bash
-aio-down "URL" -P downloads --all -o "%(title)s_%(idx)s.%(ext)s"
+lazy-down "URL" -P downloads --all -o "%(title)s_%(idx)s.%(ext)s"
 ```
 
 ### Options (tóm tắt)
