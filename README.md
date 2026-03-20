@@ -29,6 +29,30 @@ lazy-down "URL" -P downloads --all -o "%(title)s_%(idx)s.%(ext)s"
 - `--timeout`: timeout giây
 - `--write-json`: ghi JSON cạnh file
 - `--quiet`: tắt progress
+- `--upload-url`: upload file lên endpoint thay vì trả local path
+- `--upload-field`: tên field multipart (mặc định `file`)
+- `--upload-token`: Bearer token cho endpoint upload
+- `--remove-local-after-upload`: xóa file local sau khi upload thành công
+- `--only-url`: chỉ lấy URL media, không lưu file local
+
+## Upload Mode
+
+```bash
+lazy-down "URL" \
+  --upload-url "http://localhost:8787/upload" \
+  --upload-field "file" \
+  --remove-local-after-upload
+```
+
+Khi bật upload mode, `paths[]` trong JSON sẽ là URL trả về từ server upload.
+
+## Only URL Mode
+
+```bash
+lazy-down "URL" --only-url --all
+```
+
+Mode này không tải file xuống máy và không ghi vào thư mục `paths`.
 
 ## Library (Node.js)
 

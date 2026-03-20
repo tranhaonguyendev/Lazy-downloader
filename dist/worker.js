@@ -30,6 +30,11 @@ export class DownloadWorker {
             outtmpl: "%(title)s.%(ext)s",
             progressHooks: [],
             userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+            uploadUrl: "",
+            uploadField: "file",
+            uploadToken: "",
+            removeLocalAfterUpload: false,
+            onlyUrl: false,
             ...options
         };
         this.templater = new TemplateEngine(this.config.outtmpl);
@@ -510,8 +515,64 @@ export class DownloadWorker {
         });
         return { path: finalOut, contentType: ct, size: st.size };
     }
+    extractUploadedUrl(body) {
+        if (!body)
+            return "";
+        if (typeof body === "string") {
+            const s = body.trim();
+            return /^https?:\/\//i.test(s) ? s : "";
+        }
+        if (typeof body !== "object")
+            return "";
+        for (const key of ["url", "fileUrl", "link", "location", "secure_url", "download_url"]) {
+            const v = body?.[key];
+            if (typeof v === "string" && /^https?:\/\//i.test(v.trim()))
+                return v.trim();
+        }
+        for (const key of ["data", "result", "payload", "file"]) {
+            const x = this.extractUploadedUrl(body?.[key]);
+            if (x)
+                return x;
+        }
+        return "";
+    }
+    async uploadFile(localPath) {
+        const uploadUrl = String(this.config.uploadUrl || "").trim();
+        if (!uploadUrl)
+            return "";
+        const fileName = path.basename(localPath);
+        const bytes = await fsp.readFile(localPath);
+        const form = new FormData();
+        form.append(this.config.uploadField || "file", new Blob([bytes]), fileName);
+        const headers = {};
+        if (this.config.uploadToken)
+            headers.Authorization = `Bearer ${this.config.uploadToken}`;
+        const resp = await fetch(uploadUrl, {
+            method: "POST",
+            headers,
+            body: form
+        });
+        const txt = await resp.text();
+        if (!resp.ok) {
+            throw new Error(`Upload HTTP ${resp.status}: ${txt.slice(0, 300)}`);
+        }
+        let obj = null;
+        try {
+            obj = JSON.parse(txt);
+        }
+        catch {
+            obj = txt;
+        }
+        const url = this.extractUploadedUrl(obj);
+        if (!url) {
+            throw new Error("Upload succeeded but cannot find URL in response");
+        }
+        return url;
+    }
     async download(url, outDir, reuseBrowser = true) {
-        await this.ensureDir(outDir);
+        if (!this.config.onlyUrl) {
+            await this.ensureDir(outDir);
+        }
         let lastErr;
         const browser = await chromium.launch({ headless: !this.config.headful });
         const context = await browser.newContext({ userAgent: this.config.userAgent });
@@ -581,23 +642,41 @@ export class DownloadWorker {
                             webpage_url: url,
                             media_url: mediaUrl
                         };
-                        const rel = this.templater.resolve(info);
-                        const outPath0 = path.isAbsolute(rel) ? this.templater.ensureExt(rel, extPlan) : path.join(outDir, this.templater.ensureExt(rel, extPlan));
-                        const saved = await this.downloadStream(mediaUrl, outPath0, info);
-                        const ext = this.pickExt(m, mediaUrl, saved.contentType);
-                        let finalPath = saved.path;
-                        const want = this.templater.ensureExt(saved.path, ext);
-                        if (want !== saved.path) {
-                            const uniqueWant = await this.uniquePath(want);
-                            try {
-                                await fsp.rename(saved.path, uniqueWant);
-                                finalPath = uniqueWant;
+                        let ext = this.pickExt(m, mediaUrl, "");
+                        let finalPath = mediaUrl;
+                        let outputRef = mediaUrl;
+                        let uploadedUrl = null;
+                        let contentType = "";
+                        let fileSize = Number(m?.data_size || 0) || 0;
+                        if (!this.config.onlyUrl) {
+                            const rel = this.templater.resolve(info);
+                            const outPath0 = path.isAbsolute(rel) ? this.templater.ensureExt(rel, extPlan) : path.join(outDir, this.templater.ensureExt(rel, extPlan));
+                            const saved = await this.downloadStream(mediaUrl, outPath0, info);
+                            ext = this.pickExt(m, mediaUrl, saved.contentType);
+                            finalPath = saved.path;
+                            contentType = saved.contentType;
+                            fileSize = saved.size;
+                            const want = this.templater.ensureExt(saved.path, ext);
+                            if (want !== saved.path) {
+                                const uniqueWant = await this.uniquePath(want);
+                                try {
+                                    await fsp.rename(saved.path, uniqueWant);
+                                    finalPath = uniqueWant;
+                                }
+                                catch {
+                                    finalPath = saved.path;
+                                }
                             }
-                            catch {
-                                finalPath = saved.path;
+                            outputRef = finalPath;
+                            if (this.config.uploadUrl) {
+                                uploadedUrl = await this.uploadFile(finalPath);
+                                outputRef = uploadedUrl;
+                                if (this.config.removeLocalAfterUpload) {
+                                    await fsp.rm(finalPath, { force: true }).catch(() => { });
+                                }
                             }
                         }
-                        paths.push(finalPath);
+                        paths.push(outputRef);
                         parsed.push({
                             idx: i + 1,
                             type: String(m?.type || ""),
@@ -607,9 +686,11 @@ export class DownloadWorker {
                             height: /^\d+$/.test(String(m?.height ?? "")) ? Number(m.height) : m?.height ?? null,
                             resolution: m?.resolution ?? null,
                             url: mediaUrl,
-                            savedPath: finalPath,
-                            contentType: saved.contentType,
-                            filesize: saved.size,
+                            savedPath: outputRef,
+                            localPath: this.config.uploadUrl && !this.config.onlyUrl ? finalPath : null,
+                            uploadedUrl: this.config.onlyUrl ? mediaUrl : uploadedUrl,
+                            contentType,
+                            filesize: fileSize,
                             title,
                             author,
                             source: src,
@@ -619,7 +700,7 @@ export class DownloadWorker {
                             duration: m?.duration ?? duration,
                             webpage_url: url
                         });
-                        this.log("info", `PICK [${i + 1}/${jobs.length}] type=${String(m?.type || "")} ext=${ext} -> ${finalPath}`);
+                        this.log("info", `PICK [${i + 1}/${jobs.length}] type=${String(m?.type || "")} ext=${ext} -> ${outputRef}`);
                     }
                     const jMini = {
                         id: j?.id,

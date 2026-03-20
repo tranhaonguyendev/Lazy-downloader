@@ -18,6 +18,11 @@ interface CliArgs {
   quiet: boolean;
   stdin: boolean;
   help: boolean;
+  uploadUrl: string;
+  uploadField: string;
+  uploadToken: string;
+  removeLocalAfterUpload: boolean;
+  onlyUrl: boolean;
 }
 
 function usage(): void {
@@ -36,6 +41,11 @@ Options:
   --no-print-json            Disable printing JSON payload
   --quiet                    Disable progress output
   --stdin                    Read URLs from stdin (one per line)
+  --upload-url <url>         Upload endpoint URL (multipart/form-data)
+  --upload-field <name>      Multipart field name (default: file)
+  --upload-token <token>     Bearer token for upload endpoint
+  --remove-local-after-upload  Remove local file after upload succeeds
+  --only-url                 Do not download/upload files, return media URLs only
   -h, --help                 Show help
 `);
 }
@@ -56,7 +66,12 @@ function parseArgs(argv: string[]): CliArgs {
     noPrintJson: false,
     quiet: false,
     stdin: false,
-    help: false
+    help: false,
+    uploadUrl: "",
+    uploadField: "file",
+    uploadToken: "",
+    removeLocalAfterUpload: false,
+    onlyUrl: false
   };
 
   const args = [...argv];
@@ -82,6 +97,11 @@ function parseArgs(argv: string[]): CliArgs {
     else if (a === "--no-print-json") out.noPrintJson = true;
     else if (a === "--quiet") out.quiet = true;
     else if (a === "--stdin") out.stdin = true;
+    else if (a === "--upload-url") out.uploadUrl = need();
+    else if (a === "--upload-field") out.uploadField = need();
+    else if (a === "--upload-token") out.uploadToken = need();
+    else if (a === "--remove-local-after-upload") out.removeLocalAfterUpload = true;
+    else if (a === "--only-url") out.onlyUrl = true;
     else if (!a.startsWith("-") && !out.url) out.url = a;
     else throw new Error(`Unknown argument: ${a}`);
   }
@@ -134,7 +154,12 @@ async function main(): Promise<void> {
     jsonPretty: !args.noPretty,
     printJson: !args.noPrintJson,
     outtmpl: args.outtmpl,
-    progressHooks: hooks
+    progressHooks: hooks,
+    uploadUrl: args.uploadUrl,
+    uploadField: args.uploadField,
+    uploadToken: args.uploadToken,
+    removeLocalAfterUpload: args.removeLocalAfterUpload,
+    onlyUrl: args.onlyUrl
   });
 
   if (args.stdin) {

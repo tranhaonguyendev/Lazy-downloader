@@ -11,6 +11,11 @@ export interface DownloadOptions {
     outtmpl?: string;
     progressHooks?: Array<(d: any) => void>;
     userAgent?: string;
+    uploadUrl?: string;
+    uploadField?: string;
+    uploadToken?: string;
+    removeLocalAfterUpload?: boolean;
+    onlyUrl?: boolean;
 }
 export declare class DownloadWorker {
     private readonly config;
@@ -40,5 +45,7 @@ export declare class DownloadWorker {
     private autolinkAuthFlow;
     private autolink;
     private downloadStream;
+    private extractUploadedUrl;
+    private uploadFile;
     download(url: string, outDir: string, reuseBrowser?: boolean): Promise<any>;
 }
