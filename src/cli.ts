@@ -53,7 +53,7 @@ Options:
 function parseArgs(argv: string[]): CliArgs {
   const out: CliArgs = {
     url: "",
-    paths: "assets/cache",
+    paths: "downloaded",
     outtmpl: "%(title)s.%(ext)s",
     all: false,
     headful: false,
