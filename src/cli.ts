@@ -26,7 +26,7 @@ interface CliArgs {
 }
 
 function usage(): void {
-  console.log(`Usage: lazy-down [url] [options]\n
+  console.log(`Usage; lazy-down [url] [options]\n
 Options:
   -P, --paths <dir>          Output directory (default: assets/cache)
   -o, --outtmpl <template>   Output template (default: %(title)s.%(ext)s)
