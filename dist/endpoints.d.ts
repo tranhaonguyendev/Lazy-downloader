@@ -3,6 +3,5 @@ export declare const Endpoints: {
     home: () => string;
     api: () => string;
     autolink: () => string;
-    authBootstrap: () => string;
     authIssue: () => string;
 };

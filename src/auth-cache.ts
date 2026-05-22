@@ -4,7 +4,6 @@ import path from "node:path";
 
 interface HostState {
   bearer?: { token: string; exp: number };
-  cookie_tokens?: { csrf: string; api: string; exp: number };
   session_cookie?: { value: string; exp: number };
 }
 
@@ -73,21 +72,6 @@ export class AuthCacheStore {
       delete h.bearer;
       this.save();
     }
-  }
-
-  getCookieTokens(base: string): { csrf: string; api: string } {
-    const c = this.host(base).cookie_tokens;
-    if (!c) return { csrf: "", api: "" };
-    if (!c.csrf || !c.api || c.exp <= nowSec() + 10) return { csrf: "", api: "" };
-    return { csrf: c.csrf, api: c.api };
-  }
-
-  setCookieTokens(base: string, csrf: string, api: string, ttlSec = 86400): void {
-    const x = String(csrf || "").trim();
-    const y = String(api || "").trim();
-    if (!x || !y) return;
-    this.host(base).cookie_tokens = { csrf: x, api: y, exp: nowSec() + Math.max(60, Number(ttlSec) || 86400) };
-    this.save();
   }
 
   getSessionCookie(base: string): string {

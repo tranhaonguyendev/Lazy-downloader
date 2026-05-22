@@ -26,6 +26,7 @@ export declare class DownloadWorker {
     private hook;
     private safeFileName;
     private pickMedias;
+    private pickApiMessage;
     private pickId;
     private pickSource;
     private pickTitle;
@@ -38,9 +39,13 @@ export declare class DownloadWorker {
     private uniquePath;
     private needsMetaEnrich;
     private fetchMetaFromWebpage;
-    private j2h;
+    private hasLeadingZeroNibbles;
+    private deriveAltChallenge;
+    private solveSinglePow;
     private solvePow;
-    private autolinkWithCookie;
+    private parseBootstrap;
+    private refreshHomeState;
+    private issueBearer;
     private autolinkWithBearer;
     private autolinkAuthFlow;
     private autolink;

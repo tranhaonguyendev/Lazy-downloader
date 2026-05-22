@@ -71,6 +71,20 @@ export class DownloadWorker {
         }
         return [];
     }
+    pickApiMessage(j) {
+        const candidates = [
+            j?.message,
+            j?.error?.message,
+            j?.data?.message,
+            j?.data?.error?.message
+        ];
+        for (const value of candidates) {
+            const text = String(value || "").trim();
+            if (text)
+                return text.replace(/\s+/g, " ");
+        }
+        return "";
+    }
     pickId(j) {
         const raw = j?.id || j?.pk || j?.url || String(nowMs());
         return String(raw).replace(/[^a-zA-Z0-9_-]+/g, "").slice(0, 64) || String(nowMs());
@@ -242,68 +256,141 @@ export class DownloadWorker {
         }
         return { title, author };
     }
-    j2h(buf, n) {
-        const imul = Math.imul;
-        let a = (2783036115 + n) >>> 0;
-        let h = (2134608921 ^ n) >>> 0;
-        let i = (3572102818 + (n << 16)) >>> 0;
-        for (let l = 0; l < n; l += 1) {
-            a = (a ^ buf[l]) >>> 0;
-            a = imul(a, 2654435769) >>> 0;
-            a = ((a << 13) | (a >>> 19)) >>> 0;
-            h = (h + a) >>> 0;
-            h = imul(h, 1367130551) >>> 0;
-            h = ((h << 17) | (h >>> 15)) >>> 0;
-            i = (i ^ ((a + h) >>> 0)) >>> 0;
-            i = imul(i, 1818371886) >>> 0;
-            i = ((i << 11) | (i >>> 21)) >>> 0;
-            a = (a + i) >>> 0;
+    hasLeadingZeroNibbles(bytes, difficulty) {
+        const fullBytes = Math.floor(Number(difficulty || 0) / 2);
+        const hasHalfByte = (Number(difficulty || 0) & 1) === 1;
+        for (let i = 0; i < fullBytes; i += 1) {
+            if (bytes[i] !== 0)
+                return false;
         }
-        a ^= a >>> 16;
-        a = imul(a, 2246822507) >>> 0;
-        a ^= a >>> 13;
-        a = imul(a, 3266489909) >>> 0;
-        a ^= a >>> 16;
-        h ^= h >>> 16;
-        h = imul(h, 3432918353) >>> 0;
-        h ^= h >>> 13;
-        h = imul(h, 461845907) >>> 0;
-        h ^= h >>> 16;
-        return (a ^ h ^ i) >>> 0;
+        if (hasHalfByte && (bytes[fullBytes] & 0xf0) !== 0)
+            return false;
+        return true;
     }
-    solvePow(challenge, difficulty) {
-        if (!challenge || !difficulty)
-            return "";
-        const shift = 32 - Number(difficulty) * 4;
-        const prefix = new TextEncoder().encode(`${challenge}:`);
+    async deriveAltChallenge(challenge, nonce, solution, encoder) {
+        const input = encoder.encode(`pow:alt:${challenge}:${nonce}:${solution}`);
+        const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", input));
+        let hex = "";
+        for (let i = 0; i < 16; i += 1) {
+            hex += hash[i].toString(16).padStart(2, "0");
+        }
+        return hex;
+    }
+    async solveSinglePow(challengeType, challenge, nonce, difficulty, encoder) {
+        const prefix = challengeType === "alt" ? `pow:${nonce}:` : `pow:${challenge}:`;
+        const suffix = challengeType === "alt" ? `:${challenge}` : `:${nonce}:${challenge.length}`;
+        const prefixBytes = encoder.encode(prefix);
+        const suffixBytes = encoder.encode(suffix);
+        const prefixLen = prefixBytes.length;
+        const suffixLen = suffixBytes.length;
+        const buf = new Uint8Array(prefixLen + 10 + suffixLen);
+        buf.set(prefixBytes);
+        if (suffixLen > 0)
+            buf.set(suffixBytes, buf.length - suffixLen);
         for (let n = 0; n < 100000000; n += 1) {
-            const suffix = new TextEncoder().encode(String(n));
-            const buf = new Uint8Array(prefix.length + suffix.length);
-            buf.set(prefix);
-            buf.set(suffix, prefix.length);
-            if ((this.j2h(buf, buf.length) >>> shift) === 0)
+            let v = n;
+            let pos = prefixLen;
+            if (v === 0) {
+                buf[pos++] = 48;
+            }
+            else {
+                const start = pos;
+                while (v > 0) {
+                    buf[pos++] = 48 + (v % 10);
+                    v = (v / 10) | 0;
+                }
+                for (let l = start, r = pos - 1; l < r; l += 1, r -= 1) {
+                    const t = buf[l];
+                    buf[l] = buf[r];
+                    buf[r] = t;
+                }
+            }
+            if (suffixLen > 0)
+                buf.set(suffixBytes, pos);
+            const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", buf.subarray(0, pos + suffixLen)));
+            if (this.hasLeadingZeroNibbles(hash, difficulty)) {
                 return String(n);
+            }
         }
         return "";
     }
-    async autolinkWithCookie(context, url, csrf, apiToken) {
-        const payload = { data: { url, unlock: Boolean(this.config.unlock) } };
-        const resp = await context.request.post(Endpoints.autolink(), {
-            headers: {
-                Accept: "application/json, text/plain, */*",
-                "Content-Type": "application/json",
-                Origin: BASE,
-                Referer: Endpoints.home(),
-                "User-Agent": this.config.userAgent,
-                "x-csrf-token": csrf,
-                Cookie: `api_token=${apiToken}; csrf_token=${csrf}`
-            },
-            data: payload,
+    async solvePow(challenge, nonce, difficulty, challengeType = "classic") {
+        if (!challenge || !difficulty)
+            return "";
+        const encoder = new TextEncoder();
+        const first = await this.solveSinglePow(challengeType, challenge, nonce, difficulty, encoder);
+        if (!first)
+            return "";
+        if (challengeType !== "alt")
+            return first;
+        const secondChallenge = await this.deriveAltChallenge(challenge, nonce, first, encoder);
+        const second = await this.solveSinglePow(challengeType, secondChallenge, nonce, difficulty, encoder);
+        return second ? `${first}.${second}` : "";
+    }
+    parseBootstrap(raw) {
+        const nonce = String(raw?.nonce || "").trim();
+        if (!nonce)
+            return null;
+        return {
+            nonce,
+            powChallenge: String(raw?.powChallenge || "").trim(),
+            challengeType: String(raw?.challengeType || "").trim(),
+            powDifficulty: Number(raw?.powDifficulty || 0) || 0
+        };
+    }
+    async refreshHomeState(context) {
+        const page = await context.newPage();
+        try {
+            await page.goto(Endpoints.home(), {
+                waitUntil: "domcontentloaded",
+                timeout: this.config.timeoutSec * 1000
+            });
+            await page.waitForTimeout(500);
+            const bootstrap = await page.evaluate(() => {
+                const w = window;
+                return w.__BOOTSTRAP__ || null;
+            });
+            const parsed = this.parseBootstrap(bootstrap);
+            if (!parsed) {
+                throw new Error("bootstrap_missing");
+            }
+            const cookies = await context.cookies();
+            const session = cookies.find((c) => c?.name === "session")?.value || "";
+            if (session)
+                this.authCache.setSessionCookie(BASE, session);
+            return parsed;
+        }
+        finally {
+            await page.close().catch(() => { });
+        }
+    }
+    async issueBearer(context, bootstrap) {
+        const solution = bootstrap.powChallenge && bootstrap.nonce && bootstrap.powDifficulty > 0
+            ? await this.solvePow(bootstrap.powChallenge, bootstrap.nonce, bootstrap.powDifficulty, bootstrap.challengeType || "classic")
+            : "";
+        const headers = {
+            Accept: "application/json, text/plain, */*",
+            Origin: BASE,
+            Referer: Endpoints.home(),
+            "User-Agent": this.config.userAgent,
+            "X-Page-Nonce": bootstrap.nonce
+        };
+        if (solution)
+            headers["X-Pow-Solution"] = solution;
+        const resp = await context.request.post(Endpoints.authIssue(), {
+            headers,
             timeout: this.config.timeoutSec * 1000
         });
-        if (resp.status() !== 200)
-            return null;
-        return await resp.json();
+        const text = await resp.text();
+        if (resp.status() !== 200) {
+            throw new Error(`Auth issue HTTP ${resp.status()}: ${text.slice(0, 300)}`);
+        }
+        const json = JSON.parse(text || "{}");
+        const token = String(json?.accessToken || json?.token || json?.data?.accessToken || "").trim();
+        const expiresInSec = Number(json?.expiresIn || json?.data?.expiresIn || 180) || 180;
+        if (!token)
+            throw new Error("access_token_issue_failed");
+        return { token, expiresInSec };
     }
     async autolinkWithBearer(context, url, token) {
         const payload = { data: { url, unlock: Boolean(this.config.unlock) } };
@@ -329,45 +416,9 @@ export class DownloadWorker {
     }
     async autolinkAuthFlow(context, targetUrl, skipHome = false) {
         const runHttp = async () => {
-            const b = await context.request.get(Endpoints.authBootstrap(), {
-                timeout: this.config.timeoutSec * 1000,
-                headers: {
-                    Accept: "application/json, text/plain, */*",
-                    Origin: BASE,
-                    Referer: Endpoints.home(),
-                    "User-Agent": this.config.userAgent
-                }
-            });
-            const btxt = await b.text();
-            if (b.status() !== 200)
-                return { status: b.status(), phase: "bootstrap", text: btxt };
-            const bj = JSON.parse(btxt || "{}");
-            const nonce = String(bj.nonce || "").trim();
-            if (!nonce)
-                return { status: 500, phase: "bootstrap", text: "nonce_missing" };
-            const solution = this.solvePow(String(bj.powChallenge || ""), Number(bj.powDifficulty || 0));
-            const issueHeaders = {
-                "X-Page-Nonce": nonce,
-                Origin: BASE,
-                Referer: Endpoints.home(),
-                "User-Agent": this.config.userAgent,
-                Accept: "application/json, text/plain, */*"
-            };
-            if (solution)
-                issueHeaders["X-Pow-Solution"] = solution;
-            const i = await context.request.post(Endpoints.authIssue(), {
-                headers: issueHeaders,
-                timeout: this.config.timeoutSec * 1000
-            });
-            const itxt = await i.text();
-            if (i.status() !== 200)
-                return { status: i.status(), phase: "issue", text: itxt };
-            const ij = JSON.parse(itxt || "{}");
-            const token = String(ij.accessToken || ij.token || ij?.data?.accessToken || "").trim();
-            const expSec = Number(ij.expiresIn || ij?.data?.expiresIn || 180) || 180;
-            if (!token)
-                return { status: 500, phase: "issue", text: "token_missing" };
-            this.authCache.setBearer(BASE, token, expSec);
+            const bootstrap = await this.refreshHomeState(context);
+            const issued = await this.issueBearer(context, bootstrap);
+            this.authCache.setBearer(BASE, issued.token, issued.expiresInSec);
             const r = await context.request.post(Endpoints.autolink(), {
                 headers: {
                     Accept: "application/json, text/plain, */*",
@@ -375,7 +426,7 @@ export class DownloadWorker {
                     Origin: BASE,
                     Referer: Endpoints.home(),
                     "User-Agent": this.config.userAgent,
-                    Authorization: `Bearer ${token}`
+                    Authorization: `Bearer ${issued.token}`
                 },
                 data: { data: { url: targetUrl, unlock: Boolean(this.config.unlock) } },
                 timeout: this.config.timeoutSec * 1000
@@ -397,22 +448,9 @@ export class DownloadWorker {
             ]);
         }
         let result = await runHttp();
-        if (result.status === 401 && /session_required/i.test(result.text || "") && !skipHome) {
-            const page = await context.newPage();
-            try {
-                await page.goto(Endpoints.home(), {
-                    waitUntil: "domcontentloaded",
-                    timeout: this.config.timeoutSec * 1000
-                });
-                await page.waitForTimeout(300);
-            }
-            finally {
-                await page.close().catch(() => { });
-            }
-            const cookies = await context.cookies();
-            const s = cookies.find((c) => c?.name === "session")?.value || "";
-            if (s)
-                this.authCache.setSessionCookie(BASE, s);
+        if (result.status === 401 &&
+            /(session_required|bootstrap_expired|page_nonce_invalid|pow_context_invalid|session_expired)/i.test(result.text || "") &&
+            !skipHome) {
             result = await runHttp();
         }
         if (result.status !== 200) {
@@ -421,18 +459,6 @@ export class DownloadWorker {
         return JSON.parse(result.text || "{}");
     }
     async autolink(context, url, skipHome = false) {
-        const cookies = await context.cookies();
-        const map = Object.fromEntries(cookies.filter((c) => c?.name).map((c) => [c.name, c.value]));
-        const cachedTokens = this.authCache.getCookieTokens(BASE);
-        const csrf = map.csrf_token || cachedTokens.csrf;
-        const apiToken = map.api_token || cachedTokens.api;
-        if (csrf && apiToken) {
-            const j = await this.autolinkWithCookie(context, url, csrf, apiToken);
-            if (j) {
-                this.authCache.setCookieTokens(BASE, csrf, apiToken);
-                return j;
-            }
-        }
         const bearer = this.authCache.getBearer(BASE);
         if (bearer) {
             const j = await this.autolinkWithBearer(context, url, bearer);
@@ -578,10 +604,6 @@ export class DownloadWorker {
         const context = await browser.newContext({ userAgent: this.config.userAgent });
         try {
             let hasWarm = false;
-            const cookies = await context.cookies();
-            const map = Object.fromEntries(cookies.filter((c) => c?.name).map((c) => [c.name, c.value]));
-            if (map.csrf_token && map.api_token)
-                hasWarm = true;
             if (this.authCache.getBearer(BASE))
                 hasWarm = true;
             if (this.authCache.getSessionCookie(BASE))
@@ -598,8 +620,10 @@ export class DownloadWorker {
                     const j = await this.autolink(context, url, attempt > 1);
                     const dt = nowMs() - t0;
                     const medias = this.pickMedias(j);
-                    if (!medias.length)
-                        throw new Error("No medias in response");
+                    if (!medias.length) {
+                        const apiMessage = this.pickApiMessage(j);
+                        throw new Error(apiMessage || "No medias in response");
+                    }
                     this.log("info", `Autolink ok medias=${medias.length} ms=${dt}`);
                     const jobs = this.config.allMedias ? medias : [medias[0]];
                     const src = this.pickSource(j);
