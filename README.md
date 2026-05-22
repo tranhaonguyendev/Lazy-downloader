@@ -54,6 +54,10 @@ lazy-down "URL" --only-url --all
 
 Mode này không tải file xuống máy và không ghi vào thư mục `paths`.
 
+## Auth Note
+
+J2Download hiện dùng flow bearer động từ `window.__BOOTSTRAP__` trên trang chủ rồi mới gọi `/api/auth/issue` và `/api/autolink`. `lazy-downloader` tự xử lý flow này qua Playwright; không còn phụ thuộc vào `csrf_token` hay `api_token` như cơ chế cũ.
+
 ## Library (Node.js)
 
 ```js
